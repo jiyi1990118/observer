@@ -1,7 +1,16 @@
 /**
  * Created by xiyuan on 17-3-7.
  */
-define(function (require, exports, module) {
+(function (observer) {
+    if (typeof define === "function" && define.amd) {
+        define(function (require, exports, module) {
+            module.exports = observer;
+        });
+    } else {
+        window.observer = observer;
+    }
+
+})(function () {
     "use strict";
 
     //全局唯一id生成
@@ -9,6 +18,7 @@ define(function (require, exports, module) {
         function n() {
             return (((1 + Math.random()) * 0x10000) | 0).toString(16).substring(1);
         }
+
         return n() + n() + n() + n() + n() + n() + n() + n();
     }
 
@@ -124,6 +134,16 @@ define(function (require, exports, module) {
     }
 
     /**
+     * 获取需要销毁的监听节点
+     * @param listen
+     * @returns {*}
+     */
+    function destroyListen(listen) {
+        if(!listen.parent || !Object.keys(listen.parent.child).length === 1 )return listen;
+        return destroyListen(listen.parent);
+    }
+
+    /**
      * 数据监听结构
      * @param parentListen
      */
@@ -133,8 +153,6 @@ define(function (require, exports, module) {
         this.child = {};
         //监听的回调集合
         this.listens = [];
-        //之前property 特性
-        this.berforDefineProperty;
         //检查传递数据类型
         if (parentListen instanceof listenStruct) {
             //父级监听数据
@@ -154,8 +172,10 @@ define(function (require, exports, module) {
 
     //数据对比
     listenStruct.prototype.diff = function (parentData) {
-        var newData = parentData && typeof parentData === 'object' ? parentData[this.nowKey] : undefined,
-            isEqual = diff(this.targetData, newData);
+        var oldData=this.targetData,
+            oldParentData=this.parentData,
+            newData = parentData && typeof parentData === 'object' ? parentData[this.nowKey] : undefined,
+            isEqual = diff(oldData, newData);
 
         //触发子级
         this.berforDefineProperty && this.berforDefineProperty.hasOwnProperty('set') && this.berforDefineProperty.set(newData, this);
@@ -165,10 +185,20 @@ define(function (require, exports, module) {
         this.targetData = newData;
 
         if (!isEqual) {
+            //还原旧数据的属性
+            //检查当前数据属性 后面是否修改
+            if(this.topListen && oldParentData !== this.parentData  && Object.getOwnPropertyDescriptor(oldParentData,this.nowKey) && Object.getOwnPropertyDescriptor(oldParentData,this.nowKey).set !== this.prevDefineProperty.set){
+                this.topListen.berforDefineProperty=this.prevDefineProperty;
+            }else{
+                this.prevDefineProperty && Object.defineProperty(oldParentData, this.nowKey, this.prevDefineProperty);
+            }
+
             //触发监听
             this.listens.forEach(function (fn) {
                 fn(newData);
             });
+
+            this.topListen=undefined;
             //数据监听
             this.listen(!(parentData && parentData.hasOwnProperty(this.nowKey)));
         }
@@ -185,13 +215,17 @@ define(function (require, exports, module) {
         var This = this;
 
         if (this.parentData && typeof this.parentData === 'object') {
-            //记录第一次 Property（数据属性）
-            this.berforDefineProperty || (this.berforDefineProperty = Object.getOwnPropertyDescriptor(this.parentData, this.nowKey) || {
+
+            this.prevDefineProperty=Object.getOwnPropertyDescriptor(this.parentData, this.nowKey) || {
                     configurable: true,
                     enumerable: true,
                     value: undefined,
                     writable: true
-                });
+                };
+
+            //记录第一次 Property（数据属性）
+            this.berforDefineProperty || (this.berforDefineProperty = this.prevDefineProperty);
+
             //数据传递给前一个listen
             this.berforDefineProperty && this.berforDefineProperty.hasOwnProperty('set') && this.berforDefineProperty.get(this);
 
@@ -207,20 +241,21 @@ define(function (require, exports, module) {
                     transfer && (This.topListen = transfer);
                 },
                 get: function (transfer) {
-                    //数据监听转移
-                    transfer && (This.topListen = transfer);
+                    switch (true){
+                        case transfer instanceof  listenStruct:
+                            //数据监听转移
+                            transfer && (This.topListen = transfer);
+                            break;
+                        case transfer === 'this':
+                            return This;
+                        default:
+                    }
                     return This.targetData;
                 }
             });
-            this.isDelete=false;
-            if(isDelete === true){
-                this.isDelete=true;
-                Object.defineProperty(this.parentData, this.nowKey, {
-                    configurable: true,
-                    enumerable: true,
-                    value: undefined,
-                    writable: true
-                });
+            this.isDelete = false;
+            if (isDelete === true) {
+                this.isDelete = true;
                 delete this.parentData[this.nowKey]
             }
         }
@@ -244,8 +279,18 @@ define(function (require, exports, module) {
 
     //删除监听
     listenStruct.prototype.remove = function (fn) {
-        var index = this.listens.indexOf(fn);
-        return index === -1 ? false : this.listens.splice(this.listens.indexOf(fn), 1)[0];
+        if(typeof fn === "function"){
+            var index = this.listens.indexOf(fn);
+            return index === -1 ? false : this.listens.splice(this.listens.indexOf(fn), 1)[0];
+        }else{
+            this.listens=[];
+        }
+
+        //所有监听移除后还原数据原有属性
+        if(!this.listens.length && !Object.keys(this.child).length){
+            //此处主要销毁监听节点
+            destroyListen(this).destroy();
+        }
     };
 
     //添加子节点
@@ -362,7 +407,7 @@ define(function (require, exports, module) {
     };
 
     //数据观察资源
-    var observerProxyStroage = window.yy = {};
+    var observerProxyStroage = {};
 
     /**
      * 数据观察对象
@@ -392,7 +437,7 @@ define(function (require, exports, module) {
      * @param watchFn
      */
     observer.prototype.unWatch = function (watchKey, watchFn) {
-        if (typeof watchFn !== "function") {
+        if (typeof watchFn !== "function" && typeof watchKey === "function") {
             watchFn = watchKey;
             watchKey = '';
         }
@@ -414,6 +459,10 @@ define(function (require, exports, module) {
     observer.prototype.destroy = function () {
         observerProxyStroage[this.sourceId].destroy();
         delete observerProxyStroage[this.sourceId];
+        //销毁所有私有属性
+        Object.keys(this).forEach(function (key) {
+            delete this[key];
+        }.bind(this))
     };
 
     /**
@@ -427,7 +476,7 @@ define(function (require, exports, module) {
         enumerable: false
     });
 
-    module.exports = function (obj) {
+    return function (obj) {
         return new observer(obj);
     };
-});
+}());

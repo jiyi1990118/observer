@@ -2,7 +2,7 @@
 javascript for es5 Data observation （基于es5核心javascript的数据观察）
 
 
-api:
+###api:
 
   watch
   
@@ -15,7 +15,7 @@ destroy
 	
 
 
-demo code:
+###demo code:
 
 	var obsObj={yes:'----'},
             watchFn=function (newVal) {

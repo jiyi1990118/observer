@@ -1,13 +1,15 @@
 /**
  * Created by xiyuan on 17-3-7.
  */
-(function (observer) {
-    if (typeof define === "function" && define.amd) {
+(function (observer,exports) {
+    if(typeof module === "object" && typeof module.exports === "object" ){
+        module.exports = observer;
+    }else if (typeof define === "function" && define.amd) {
         define(function (require, exports, module) {
             module.exports = observer;
         });
     } else {
-        window.observer = observer;
+        exports.observer = observer;
     }
 
 })(function () {
@@ -478,4 +480,4 @@
     return function (obj) {
         return new observer(obj);
     };
-}());
+}(),this);

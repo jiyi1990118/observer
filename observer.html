@@ -9,7 +9,7 @@
 <script>
     window.onload = function () {
 
-        var obsObj = {yes: '----'},
+        /*var obsObj = {yes: '----'},
             data2 = window.test = {d: 'uu'},
             watchFn = function (newVal) {
                 console.log('---1---', newVal);
@@ -87,7 +87,20 @@
         setTimeout(function () {
             a2.l[0]='yes---xiyuan'
             console.log(a1,a2)
-        },3000)
+        },3000)*/
+
+
+
+
+    var obsObj=window.s= {yes: '----'};
+
+     $observer = observer(obsObj);
+
+     $observer.watch('cd.a',function (res) {
+         console.log(res)
+     })
+
+
     }
 </script>
 </body>

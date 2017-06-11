@@ -135,14 +135,46 @@
         }
     }
 
+
+    /**
+     * 检查子节点是否有监听
+     * @param listen
+     * @returns {boolean}
+     */
+    function checkChildListen(listen) {
+
+        var i=~0,
+            key,
+            isUse,
+            nowListen,
+            childKeys=Object.keys(listen.child),
+            len=childKeys.length;
+
+        //检查当前节点是否有监听
+        isUse=listen.listens.length || listen.listensRead.length;
+
+        if(isUse)return true;
+
+        while (++i<len){
+            key=childKeys[i];
+            nowListen=listen.child[key];
+            if(isUse=checkChildListen(nowListen))return true;
+        }
+        return false;
+    }
+
     /**
      * 获取需要销毁的监听节点
      * @param listen
      * @returns {*}
      */
     function destroyListen(listen) {
-        if (!listen.parent || !Object.keys(listen.parent.child).length === 1)return listen;
-        return destroyListen(listen.parent);
+        //检查当前节点是否存在监听
+        if(!listen.listens.length && !listen.listensRead.length){
+            if(listen.parent)return destroyListen(listen.parent);
+            return listen;
+        }
+        return false;
     }
 
     /**
@@ -151,6 +183,7 @@
      */
     function listenStruct(parentListen, nowKey) {
 
+        this.count=1;
         //子级数据
         this.child = {};
         //监听的回调集合
@@ -179,31 +212,38 @@
     }
 
     //数据对比
-    listenStruct.prototype.diff = function (parentData) {
+    listenStruct.prototype.diff = function (parentData,isForce) {
         var oldData = this.targetData,
             oldParentData = this.parentData,
             newData = parentData && typeof parentData === 'object' ? parentData[this.nowKey] : undefined,
             isEqual = diff(oldData, newData);
 
-        //触发子级
-        this.berforDefineProperty && this.berforDefineProperty.hasOwnProperty('set') && this.berforDefineProperty.set(newData, this);
+        if(!this.parent)return
+
         //获取父级数据
         this.parentData = this.parent.targetData;
+
         //更改目标数据
         this.targetData = newData;
 
+        //检查当前数据属性 后面是否修改
+        if (this.topListen && oldParentData !== this.parentData && Object.getOwnPropertyDescriptor(oldParentData, this.nowKey) && Object.getOwnPropertyDescriptor(oldParentData, this.nowKey).set !== this.prevDefineProperty.set) {
+            this.topListen.berforDefineProperty = this.berforDefineProperty;
+        } else if(oldParentData !== this.parentData){
+            //还原数据之前的状态 还原旧数据的属性
+            if(oldParentData)this.berforDefineProperty && Object.defineProperty(oldParentData, this.nowKey, this.berforDefineProperty);
+        }
+
         //检查是否变化
-        if (!isEqual) {
+        if (!isEqual || isForce) {
+
+            //触发上一个级监听数据
+            if(this.berforDefineProperty && this.berforDefineProperty.hasOwnProperty('set')){
+                this.berforDefineProperty.set(newData, this,isForce);
+            }
+
             //标识有数据
             this.isData=true;
-
-            //还原旧数据的属性
-            //检查当前数据属性 后面是否修改
-            if (this.topListen && oldParentData !== this.parentData && Object.getOwnPropertyDescriptor(oldParentData, this.nowKey) && Object.getOwnPropertyDescriptor(oldParentData, this.nowKey).set !== this.prevDefineProperty.set) {
-                this.topListen.berforDefineProperty = this.prevDefineProperty;
-            } else{
-                if(oldParentData)this.prevDefineProperty && Object.defineProperty(oldParentData, this.nowKey, this.prevDefineProperty);
-            }
 
             //触发监听
             this.listens.forEach(function (fn) {
@@ -214,9 +254,11 @@
             this.listensRead.forEach(function (fn) {
                 fn(newData, oldData);
             });
-            this.listensRead=[];
 
-            this.topListen = undefined;
+            this.listensRead=[];
+        }
+
+        if(oldParentData !== this.parentData){
             //数据监听
             this.listen(!(parentData && parentData.hasOwnProperty(this.nowKey)));
         }
@@ -226,6 +268,7 @@
             var childListen = this.child[key];
             childListen.diff(newData);
         }.bind(this));
+
     };
 
     //节点数据监听
@@ -233,6 +276,19 @@
         var This = this;
 
         if (this.parentData && typeof this.parentData === 'object') {
+            //检查当前数据是否需要完全移除
+            if(isDelete){
+                this.isDelete = false;
+                if (isDelete === true) {
+                    this.isDelete = true;
+                    if(this.parentData instanceof Array){
+                        this.parentData.slice(this.nowKey,1);
+                    }else{
+                        delete this.parentData[this.nowKey]
+                    }
+                }
+                return
+            }
 
             this.prevDefineProperty = Object.getOwnPropertyDescriptor(this.parentData, this.nowKey) || {
                     configurable: true,
@@ -248,13 +304,13 @@
             this.berforDefineProperty && this.berforDefineProperty.hasOwnProperty('set') && this.berforDefineProperty.get(this);
 
             //监听数据变更
-            Object.defineProperty(this.parentData, this.nowKey, {
+            Object.defineProperty(this.parentData, this.nowKey,this.nowDefineProperty= {
                 enumerable: true,
                 configurable: true,
-                set: function (newData, transfer) {
+                set: function (newData, transfer,isForce) {
                     var tmp = {};
                     tmp[This.nowKey] = newData;
-                    This.diff(tmp);
+                    This.diff(tmp,isForce);
                     //数据监听转移
                     transfer && (This.topListen = transfer);
                 },
@@ -263,19 +319,18 @@
                         case transfer instanceof listenStruct:
                             //数据监听转移
                             transfer && (This.topListen = transfer);
+                            transfer.count=This.count+1;
                             break;
                         case transfer === 'this':
+                            return This;
+                        case transfer === 'update':
+                            This.diff(This.parentData,true);
                             return This;
                         default:
                     }
                     return This.targetData;
                 }
             });
-            this.isDelete = false;
-            if (isDelete === true) {
-                this.isDelete = true;
-                delete this.parentData[this.nowKey]
-            }
         }
 
     };
@@ -292,16 +347,17 @@
 
     //添加监听
     listenStruct.prototype.add = function (fn) {
-        this.listens.indexOf(fn) !== -1 || this.listens.push(fn);
+        /*this.listens.indexOf(fn) !== -1 || */this.listens.push(fn);
     };
 
     //添加监听
     listenStruct.prototype.addRead = function (fn) {
-        this.listensRead.indexOf(fn) !== -1 || this.listensRead.push(fn);
+        /*this.listensRead.indexOf(fn) !== -1 ||*/ this.listensRead.push(fn);
     };
 
     //删除监听
     listenStruct.prototype.remove = function (fn) {
+        var listen=this;
         if (typeof fn === "function") {
             var index = this.listens.indexOf(fn);
             return index === -1 ? false : this.listens.splice(this.listens.indexOf(fn), 1)[0];
@@ -311,9 +367,38 @@
 
         //所有监听移除后还原数据原有属性
         if (!this.listens.length && !Object.keys(this.child).length) {
+
             //此处主要销毁监听节点
-            destroyListen(this).destroy();
+            if(checkChildListen(listen)){
+                return this;
+            }else{
+                this.destroy();
+            }
+
+            if(listen.parent){
+                var i=~0,
+                    key,
+                    isUse,
+                    nowListen,
+                    childKeys=Object.keys(listen.parent.child),
+                    len=childKeys.length;
+
+                //检查同级元素中是否有监听
+                while (++i<len){
+                    key=childKeys[i];
+                    if(listen.nowKey === key)continue;
+                    nowListen=listen.parent.child[key];
+                    if(isUse=checkChildListen(nowListen))break;
+                }
+
+                if(isUse)return this;
+
+                //检查父节点上的上层是否有监听
+                if(isUse= destroyListen(listen.parent))return isUse.destroy();
+
+            }
         }
+        return this;
     };
 
     //删除read监听
@@ -360,7 +445,7 @@
         this.berforDefineProperty && this.berforDefineProperty.hasOwnProperty('set') && this.berforDefineProperty.get(this);
 
         //检查数据 是否需要归原
-        if(!this.isData){
+        if(!this.isData && this.parentData){
             delete this.parentData[this.nowKey];
         }
 
@@ -474,6 +559,7 @@
             fn = key;
             key = ''
         }
+
         //遍历监听的Key
         recursionKey(key, function (nowKey, nextKey) {
             if (nowKey) {
@@ -484,6 +570,7 @@
             }
             if (!(nowKey && nextKey)) {
                 parentListen.add(fn);
+                // parentListen.addRead(fn);
                 resData=parentListen.targetData;
                 //检查是否有数据 并触发回调
                 if(parentListen.isData)fn(resData);
@@ -507,7 +594,7 @@
             return nextKey;
         })
     };
-    
+
     //删除数据读取监听
     observerProxy.prototype.removeRead=function (key, fn) {
         var parentListen = this.listen;
@@ -602,6 +689,19 @@
     observer.prototype.get = function (key) {
         key = typeof key === "string" ? key : '';
         return observerProxyStroage[this.sourceId].get(key);
+    };
+
+    /**
+     * 设置对应的数据
+     * @param key
+     * @param data
+     */
+    observer.prototype.write = function (key, data) {
+        if(arguments.length === 1){
+            data=key;
+            key='';
+        }
+        return observerProxyStroage[this.sourceId].set(key, data);
     };
 
     /**
@@ -722,7 +822,7 @@
 
         while (++i< l){
             if(resData=objs.ob[i].get(key)){
-               return resData;
+                return resData;
             }
         }
     };

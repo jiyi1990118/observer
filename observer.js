@@ -710,7 +710,7 @@
      * @param key
      * @param data
      */
-    observer.prototype.write = function (key, data) {
+    observer.prototype.set = function (key, data) {
         if(arguments.length === 1){
             data=key;
             key='';

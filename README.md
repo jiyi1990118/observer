@@ -1,55 +1,124 @@
-# observer
-javascript for es5 Data observation （基于es5核心javascript的数据观察）
+# observer.js / watch.js
+javascript for es5 Data observation （基于es5核心javascript的数据观察）OR Manual trigger
+
+> 两个工具的API接口都差不多
+
+### 代码文件说明
+- observer.js   数据监听是利用ES5中的 Object.defineProperty 来实现对象属性监听
+- watch.js      数据监听是需要进行手动触发并监听
 
 
-### api:
+### api
 
-  watch
-  
-  unWatch
+- watch
+- unWatch
+- read
+- unRead
+- readWatch
+- set
+- get
+- destroy
 
-get
+### observer 基本使用案例
 
-destroy
+``` javascript
 
+    // 定义一个源数据
+	var obsObj={yes:'----'};
 	
+	// 创建一个监听实例
+    var $observer=observer(obsObj);
+    
+    // 监听的回调函数
+    function watchFn(newVal) {
+        console.log('---1---',newVal);
+    }
 
+    // 对第一个监听实例数据进行监听
+    $observer.watch('name.a.c',watchFn);
+    
+    // 创建第二个监听实例
+    var $observer2=observer(obsObj);
+    
+    // 创建第三个监听实例
+    var $observer3=observer(obsObj);
 
-### demo code:
+    // 对第二个监听实例数据进行监听
+    $observer2.watch('name.a.c',function (newVal) {
+        console.log('---2---',newVal);
+    });
+    
+    // 对第三个监听实例数据进行监听
+    $observer3.watch('name.a.c',function (newVal) {
+        console.log('---3---',newVal);
+    });
 
-	var obsObj={yes:'----'},
-            watchFn=function (newVal) {
-                console.log('---1---',newVal);
-            },
-            $observer=observer(obsObj);
+    // 对源数据进行改变
+    obsObj.name='xiyuan';
+    
+    // 解除第一个监听实例中的相关监听
+    $observer.unWatch('name.a.c',watchFn);
 
-        $observer.watch('name.a.c',watchFn);
-        var $observer2=observer(obsObj);
-        var $observer3=observer(obsObj);
+    // 创建一个定时器
+    setTimeout(function () {
+        // 对源数据进行改变
+        obsObj.name={a:{c:'c'}};
+        
+        // 对第一、第三个监听实例进行销毁
+        $observer.destroy();
+        $observer3.destroy();
 
-        $observer2.watch('name.a.c',function (newVal) {
-            console.log('---2---',newVal);
-        });
-        $observer3.watch('name.a.c',function (newVal) {
-            console.log('---3---',newVal);
-        });
+    },1000);
 
-        obsObj.name='xiyuan';
+    setTimeout(function () {
+        // 对源数据进行改变
+        obsObj.name.a.c='yes';
+        obsObj.name={ag:{c:'c'}};
+        
+        // 对第二个监听实例进行销毁
+        $observer2.destroy();
 
-        setTimeout(function () {
-            obsObj.name={a:{c:'c'}};
-            $observer.destroy();
-            $observer3.destroy();
+        // 输出源数据
+        console.log(obsObj)
 
-            // $observer.unWatch('name.a',watchFn);
-        },1000);
+    },2000)
+```
 
-        setTimeout(function () {
+### observer 基本使用案例
 
-            obsObj.name.a.c='yes';
-            obsObj.name={ag:{c:'c'}};
-            $observer2.destroy();
-
-            console.log(obsObj)
-
-        },2000)
+``` javascript
+    // 定义一个源数据
+    var testObj={c:"test"};
+    
+    // 创建第一个监听实例
+    var w1=new observer(testObj)
+    
+    // 对第一个监听实例数据进行监听
+    w1.watch('a.c',function(newData,oldData){
+    	console.log(newData,oldData)
+    })
+    
+    // 对源数据进行改变
+    testObj.a={c:'ok'};
+    
+    // 创建第二个监听实例
+    var w2=new observer(testObj);
+    
+    // 对第二个监听实例数据进行监听
+    w2.watch('a.b',function(newData,oldData){
+    	console.log(newData,oldData,'w2')
+    })
+    
+    // 对第二个监听实例数据进行监听
+    w2.watch('a.c',function(newData,oldData){
+    	console.log(newData,oldData,'w2')
+    })
+    
+    // 对源数据进行改变
+    testObj.a.c='ccc'
+    
+    // 调用任意同源的监听实例进行手动检查
+    w2.checked();
+    
+    w1.destroy();
+```

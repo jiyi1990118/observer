@@ -10,14 +10,15 @@ javascript for es5 Data observation （基于es5核心javascript的数据观察�
 
 ### api
 
-- watch
-- unWatch
-- read
-- unRead
-- readWatch
-- set
-- get
-- destroy
+- watch     监听
+- unWatch   解除监听
+- read      读取值
+- unRead    解除读取值
+- readWatch 读取并监听
+- set       设置值
+- get       获取值
+- destroy   销毁实例
+- forbidWrite 新添加的接口 (watch.js)  返回一个禁止写入指定的Key监听实例
 
 ### observer 基本使用案例
 

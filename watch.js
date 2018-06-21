@@ -247,6 +247,19 @@ function resolveKey(keyString) {
 }
 
 /**
+ * 对key进行序列化
+ * @param key
+ * @returns {string}
+ */
+function getNormKey(key) {
+	var keyInfo = resolveKey(key)
+	if (keyInfo.keyString) {
+		return keyInfo.nowKey + '.' + getNormKey(keyInfo.keyString)
+	}
+	return keyInfo.nowKey;
+}
+
+/**
  * 递归key
  * @param key
  * @param callback
@@ -661,12 +674,27 @@ listenNode.prototype = {
 
 /**
  * 观察代理
- * @param obj
+ * @param obj  源数据对象
+ * @param forbidWriteKeys  禁止写入的key
  */
-function observerProxy(obj) {
+function observerProxy(obj, forbidWriteKeys) {
 	addOriginInfo(this.listen = new listenNode(obj));
 	// 标识是观察根路径
 	this.listen.isRoot = true;
+	// 存储禁止写入的key
+	switch (getType(forbidWriteKeys)) {
+		case 'Array':
+			break;
+		case 'String':
+			forbidWriteKeys = forbidWriteKeys.split(',')
+			break;
+		default:
+			forbidWriteKeys = [];
+	}
+	// 存入禁止写入的名单中
+	this.forbidWriteKeys = forbidWriteKeys.map(function (key) {
+		return getNormKey(key);
+	});
 }
 
 // 观察代理原型
@@ -677,6 +705,12 @@ observerProxy.prototype = {
 	 * @param data
 	 */
 	set: function (key, data) {
+		key = getNormKey(key);
+		// 检查设置的key是否存在禁止写入的名单中
+		if (this.forbidWriteKeys.some(function ($key) {
+				return key.match(new RegExp($key+'([.]|$)'))
+			})) return;
+		
 		// 获取最后一个对象
 		var lastObjInfo = completeLoopLastObj(this.listen.targetData, key, data);
 		
@@ -854,9 +888,14 @@ observerProxy.prototype = {
 	}
 };
 
-// 数据驱动类
-function Driven(obj) {
-	proxyStorage[this.__sourceId__ = uid()] = new observerProxy(obj);
+/**
+ * 数据驱动类
+ * @param obj  源数据对象
+ * @param {String | Array | Null } forbidWriteKeys  禁止写入的key
+ * @constructor
+ */
+function Driven(obj, forbidWriteKeys) {
+	proxyStorage[this.__sourceId__ = uid()] = new observerProxy(obj, forbidWriteKeys);
 }
 
 Driven.prototype = {
@@ -936,6 +975,7 @@ Driven.prototype = {
 		proxyStorage[this.__sourceId__].readWatch(watchKey, watchFn);
 		return this;
 	},
+	
 	/**
 	 * 检查数据
 	 */
@@ -943,6 +983,15 @@ Driven.prototype = {
 		var listen = proxyStorage[this.__sourceId__].listen;
 		listen.inspectionChild('', listen.targetData);
 		return this;
+	},
+	/**
+	 * 禁止写入
+	 * @param {String | Array} keys
+	 * @returns Driven
+	 */
+	forbidWrite: function (keys) {
+		var listen = proxyStorage[this.__sourceId__].listen;
+		return Driven(listen.targetData, keys)
 	},
 	/**
 	 * 观察实例销毁

@@ -85,25 +85,25 @@ javascript for es5 Data observation （基于es5核心javascript的数据观察�
     },2000)
 ```
 
-### observer 基本使用案例
+### watch.js 基本使用案例
 
 ``` javascript
     // 定义一个源数据
     var testObj={c:"test"};
     
     // 创建第一个监听实例
-    var w1=new observer(testObj)
+    var w1=new Driven(testObj)
     
     // 对第一个监听实例数据进行监听
     w1.watch('a.c',function(newData,oldData){
     	console.log(newData,oldData)
     })
     
-    // 对源数据进行改变
-    testObj.a={c:'ok'};
+    // 对数据进行改变
+    w1.set('a',{c:'yes'})
     
     // 创建第二个监听实例
-    var w2=new observer(testObj);
+    var w2=new Driven(testObj);
     
     // 对第二个监听实例数据进行监听
     w2.watch('a.b',function(newData,oldData){

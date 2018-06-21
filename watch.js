@@ -991,7 +991,7 @@ Driven.prototype = {
 	 */
 	forbidWrite: function (keys) {
 		var listen = proxyStorage[this.__sourceId__].listen;
-		return Driven(listen.targetData, keys)
+		return new Driven(listen.targetData, keys);
 	},
 	/**
 	 * 观察实例销毁

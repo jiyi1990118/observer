@@ -495,8 +495,9 @@ listenNode.prototype = {
 		var equal = describeDiff(describe, data);
 		// 检查数据是否同一对象
 		if (!equal || targetData !== oldData || isCheck) {
+			this.targetData = targetData;
 			// 重新赋值、并与父节点进行关联
-			if (targetData && this.parent) this.parent.targetData[this.nowKey] = this.targetData = this.parent.targetData[this.nowKey] = targetData;
+			if (targetData && this.parent) this.parent.targetData[this.nowKey] = this.parent.targetData[this.nowKey] = targetData;
 			// 进行子节点的变化对比
 			Object.keys(child).forEach(function (key) {
 				child[key].inspection(targetData ? targetData[key] : targetData, isCheck);

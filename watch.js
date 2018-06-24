@@ -706,10 +706,13 @@ observerProxy.prototype = {
 	 */
 	set: function (key, data) {
 		key = getNormKey(key);
+
+		var forbidWriteKey;
 		// 检查设置的key是否存在禁止写入的名单中
 		if (this.forbidWriteKeys.some(function ($key) {
-				return key.match(new RegExp($key+'([.]|$)'))
-			})) return;
+            	forbidWriteKey=$key;
+				return key.match(new RegExp('^'+$key+'([.]|$)')) || $key.match(new RegExp('^'+key+'([.]|$)'));
+			})) return console.warn('此值不可修改 ^o^ 【 key : ' +forbidWriteKey+' 已设置为不可写 】');
 		
 		// 获取最后一个对象
 		var lastObjInfo = completeLoopLastObj(this.listen.targetData, key, data);
@@ -724,6 +727,7 @@ observerProxy.prototype = {
 				listenNode.inspectionChild(lastObjInfo.useKey, lastObjInfo.useObj);
 			})
 		}
+		return true;
 	},
 	/**
 	 * 资源获取
@@ -911,8 +915,7 @@ Driven.prototype = {
 			data = key;
 			key = '';
 		}
-		proxyStorage[this.__sourceId__].set(key, data);
-		return data;
+		return proxyStorage[this.__sourceId__].set(key, data);
 	},
 	/**
 	 * 获取对应的数据
@@ -937,7 +940,10 @@ Driven.prototype = {
 	 * @param fn
 	 */
 	unRead: function (key, fn) {
-		proxyStorage[this.__sourceId__].removeRead(key, fn);
+        var This=this;
+        [].concat(key).forEach(function (key) {
+            proxyStorage[This.__sourceId__].removeRead(key, fn);
+        });
 		return this;
 	},
 	/**
@@ -946,11 +952,15 @@ Driven.prototype = {
 	 * @param watchFn
 	 */
 	watch: function (watchKey, watchFn) {
+		var This=this;
 		if (typeof watchFn !== "function") {
 			watchFn = watchKey;
 			watchKey = '';
 		}
-		proxyStorage[this.__sourceId__].addListen(watchKey, watchFn);
+
+		[].concat(watchKey).forEach(function (key) {
+            proxyStorage[This.__sourceId__].addListen(key, watchFn);
+        });
 		return this;
 	},
 	/**
@@ -959,11 +969,14 @@ Driven.prototype = {
 	 * @param watchFn
 	 */
 	unWatch: function (watchKey, watchFn) {
+        var This=this;
 		if (typeof watchFn !== "function" && typeof watchKey === "function") {
 			watchFn = watchKey;
 			watchKey = '';
 		}
-		proxyStorage[this.__sourceId__].removeListen(watchKey, watchFn);
+        [].concat(watchKey).forEach(function (key) {
+            proxyStorage[This.__sourceId__].removeListen(key, watchFn);
+        });
 		return this;
 	},
 	/**
@@ -972,7 +985,10 @@ Driven.prototype = {
 	 * @param watchFn
 	 */
 	readWatch: function (watchKey, watchFn) {
-		proxyStorage[this.__sourceId__].readWatch(watchKey, watchFn);
+        var This=this;
+        [].concat(watchKey).forEach(function (key) {
+            proxyStorage[This.__sourceId__].readWatch(key, watchFn);
+        });
 		return this;
 	},
 	
@@ -991,7 +1007,7 @@ Driven.prototype = {
 	 */
 	forbidWrite: function (keys) {
 		var listen = proxyStorage[this.__sourceId__].listen;
-		return Driven(listen.targetData, keys)
+		return new Driven(listen.targetData, keys)
 	},
 	/**
 	 * 观察实例销毁

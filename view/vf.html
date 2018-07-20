@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+</head>
+<body>
+
+<script type="text/vf-template">
+    <div>
+        <block name="nav">
+            <div>菜单</div>
+        </block>
+        <block @:name="main">
+            <div>内容体</div>
+        </block>
+        <for exp="(item,key) in list">
+
+        </for>
+
+        <div :if="$data.switch">
+
+        </div>
+        {{$computed.testData}}
+        <div :if="$methods.switch(switch)">
+            {{$methods.doc(HTMLDoc)|:toText(2,$,Math.random())}}
+        </div>
+    </div>
+</script>
+
+<script src="HTMLParser.js" type="text/javascript"></script>
+<script>
+    window.onload=function () {
+        var template=document.querySelector('script[type="text/vf-template"]').innerHTML;
+
+        console.log(HTMLParser(template))
+    }
+</script>
+</body>
+</html>

@@ -8,98 +8,23 @@
 <script src="observer.js"></script>
 <script src="watch.js"></script>
 <script>
+	// 定义一个源数据
+	var test1={a:"tesa"};
+
+	var test2={b:'tesb'}
+
     window.onload = function () {
 
-        /*var obsObj = {yes: '----'},
-            data2 = window.test = {d: 'uu'},
-            watchFn = function (newVal) {
-                console.log('---1---', newVal);
-            },
-            $observer = observer(obsObj),
-            dataObserver = observer(data2);
+	    // 创建第一个监听实例
+	    var w1=new Driven(test1)
 
-        dataObserver.watch('d', function (newVal) {
-            console.log('this data2   -------------- ', newVal);
-        });
+	    // 对第一个监听实例数据进行监听
+	    w1.watch('a.c',function(newData,oldData){
+		    console.log(newData,oldData)
+	    });
 
-        $observer.watch('name.a.c', watchFn);
-        var $observer2 = observer(obsObj);
-        var $observer3 = observer(obsObj);
+	    var merge=w1.merge(test2);
 
-        $observer2.watch('name.a.c', function (newVal) {
-            console.log('---2---', newVal);
-        });
-        $observer3.watch('name.a.c', function (newVal) {
-            console.log('---3---', newVal);
-        });
-
-        obsObj.name = 'xiyuan';
-
-        setTimeout(function () {
-            obsObj.name = {a: {c: 'c'}};
-            $observer.destroy();
-            $observer3.destroy();
-
-            // $observer.unWatch('name.a',watchFn);
-        }, 1000);
-
-        setTimeout(function () {
-
-            obsObj.name.a.c = 'yes';
-            obsObj.name = {ag: {c: data2}};
-
-            dataObserver.destroy();
-
-            obsObj.name.ag.c.d = 'test data';
-
-
-            console.log(obsObj.name === $observer2.get().name, $observer3)
-
-            $observer2.destroy();
-
-
-        }, 2000)
-
-        //数组
-        var a1={l:[1,2,3]},
-            a2={l:[2,2,3]};
-
-
-        var oa1=observer(a1),
-            oa2=observer(a2);
-
-
-        a1.l=a2.l;
-
-        oa1.watch('l[0]',function (val) {
-            console.log(val,'数组----》')
-        });
-
-        oa2.watch('l[0]',function (val) {
-            console.log(val,'???????????')
-        });
-
-
-        a1.l=['change'];
-        oa1.destroy();
-
-        oa2.unWatch('l[0]');
-
-        setTimeout(function () {
-            a2.l[0]='yes---xiyuan'
-            console.log(a1,a2)
-        },3000)*/
-
-
-
-
-    var obsObj=window.s= {yes: '----'};
-
-     $observer = observer(obsObj);
-
-     $observer.watch('cd.a',function (res) {
-         console.log(res)
-     })
 
 
     }

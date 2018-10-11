@@ -1,0 +1,20 @@
+{
+  "name": "observer",
+  "version": "1.0.0",
+  "description": "javascript for es5 Data observation （基于es5核心javascript的数据观察）OR Manual trigger",
+  "main": "observer.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jiyi1990118/observer.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/jiyi1990118/observer/issues"
+  },
+  "homepage": "https://github.com/jiyi1990118/observer#readme"
+}

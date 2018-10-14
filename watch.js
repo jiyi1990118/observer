@@ -9,8 +9,14 @@ var originCount = 0;
 // 数据观察资源
 const proxyStorage = {};
 
+// 数据观察合并资源
+const proxyMergeStorage = {};
+
 // 数据观察临时资源
 const proxyTempStorage = {};
+
+// 数据观察forbidWriteKeys
+const proxyForbidWriteKeys = {};
 
 // 源数据存储
 const originDataStorage = [];
@@ -703,33 +709,11 @@ function observerProxy(obj, forbidWriteKeys) {
 // 观察代理原型
 observerProxy.prototype = {
 	/**
-	 * 添加禁止写入的key
-	 * @param key
-	 */
-	addForbidWriteKey: function (...key) {
-		[...key].forEach(key => {
-			if (typeof key === "string") {
-				key = getNormKey(key);
-				this.forbidWriteKeys.indexOf(key) === -1 && this.forbidWriteKeys.push(key)
-			}
-		})
-	},
-	
-	/**
 	 * 资源设置
 	 * @param key
 	 * @param data
 	 */
 	set: function (key, data) {
-		key = getNormKey(key);
-		
-		var forbidWriteKey;
-		// 检查设置的key是否存在禁止写入的名单中
-		if (this.forbidWriteKeys.some(function ($key) {
-				forbidWriteKey = $key;
-				return key.match(new RegExp('^' + $key + '([.]|$)')) || $key.match(new RegExp('^' + key + '([.]|$)'));
-			})) return console.warn('此值不可修改 ^o^ 【 key : ' + forbidWriteKey + ' 已设置为不可写 】');
-		
 		// 获取最后一个对象
 		var lastObjInfo = completeLoopLastObj(this.listen.targetData, key, data);
 		
@@ -924,14 +908,24 @@ observerProxy.prototype = {
  * @param {String | Array | Null } forbidWriteKeys  禁止写入的key
  * @constructor
  */
-function Driven(obj, forbidWriteKeys) {
-	if (isInstance(obj, Driven)) return obj.forbidWrite(forbidWriteKeys);
+function Driven(obj, ...forbidWriteKeys) {
 	let id = uid();
 	this.__sourceId__ = id;
-	proxyTempStorage[id] = {
-		read: {}
-	};
-	proxyStorage[id] = [new observerProxy(isMemberData(obj) ? obj : {}, forbidWriteKeys)];
+	proxyForbidWriteKeys[id] = [];
+	// 检查是否空置观察实例
+	if (obj) {
+		// 检查是否观察驱动实例
+		if (isInstance(obj, Driven)) return obj.forbidWrite(...forbidWriteKeys);
+		proxyStorage[id] = new observerProxy(isMemberData(obj) ? obj : {}, forbidWriteKeys);
+	} else {
+		proxyTempStorage[id] = {
+			read: {}
+		};
+		// 保存合并实例
+		proxyMergeStorage[id] = [...forbidWriteKeys].map(function (instance) {
+			return isInstance(instance, Driven) ? Driven : new Driven(instance)
+		});
+	}
 }
 
 Driven.prototype = {
@@ -943,27 +937,30 @@ Driven.prototype = {
 	 * @param data
 	 */
 	set: function (key, data) {
+		
+		let id = this.__sourceId__;
+		let forbidWriteKey;
+		let proxy = proxyStorage[id];
+		
 		if (arguments.length === 1) {
 			data = key;
 			key = '';
 		}
 		
-		let proxyStorages = proxyStorage[this.__sourceId__];
-		let len = proxyStorages.length;
-		let i = 0;
-		let proxy = proxyStorages[i];
+		// 检查设置的key是否存在禁止写入的名单中
+		if (proxyForbidWriteKeys[id].some(function ($key) {
+			forbidWriteKey = $key;
+			return getNormKey(key).match(new RegExp('^' + $key + '([.]|$)')) || $key.match(new RegExp('^' + key + '([.]|$)'));
+		})) return console.warn('此值不可修改 ^o^ 【 key : ' + forbidWriteKey + ' 已设置为不可写 】');
+		
 		
 		// 检查是否复合观察实例
-		while (i < len) {
-			// 找到拥有数据的进行设置
-			if (proxyStorages[i].checkedHasOwnProperty(key)) {
-				i = len;
-				proxy = proxyStorages[i];
-			}
-			i++;
+		if (proxy) {
+			return proxy.set(key, data);
+		} else {
+			let instance = this.checkedHasOwnProperty(key, true).instance;
+			return proxyStorage[instance.__sourceId__].set(key, data);
 		}
-		
-		return proxy.set(key, data);
 	},
 	/**
 	 * 获取对应的数据
@@ -972,22 +969,16 @@ Driven.prototype = {
 	get: function (key) {
 		key = typeof key === "string" ? key : '';
 		
-		let proxyStorages = proxyStorage[this.__sourceId__];
-		let len = proxyStorages.length;
-		let i = 0;
-		let proxy = proxyStorages[i];
+		let id = this.__sourceId__;
+		let proxy = proxyStorage[id];
 		
 		// 检查是否复合观察实例
-		while (i < len) {
-			// 找到拥有数据的进行设置
-			if (proxyStorages[i].checkedHasOwnProperty(key)) {
-				i = len;
-				proxy = proxyStorages[i];
-			}
-			i++;
+		if (proxy) {
+			return proxy.get(key);
+		} else {
+			let instance = this.checkedHasOwnProperty(key, true).instance;
+			return proxyStorage[instance.__sourceId__].get(key);
 		}
-		
-		return proxy.get(key);
 	},
 	/**
 	 * 根据key读取数据
@@ -995,19 +986,36 @@ Driven.prototype = {
 	 * @param fn
 	 */
 	read: function (key, fn) {
-		let proxyStorages = proxyStorage[this.__sourceId__];
+		let proxyStorage = proxyStorage[this.__sourceId__];
 		let readInfo = proxyTempStorage[this.__sourceId__].read;
 		
-		readInfo[key] = readInfo[key] || {
+		let readFnInfo = readInfo[key] = readInfo[key] || {
 			fns: [],
 			mapFns: []
+		};
+		
+		const proxyWatchFn = function (...args) {
+			// 代理执行
+			fn.bind(this)(...args);
+			// 进行遍历移除
+			proxyStorage.forEach(proxy => proxy.removeRead(key, arguments.callee));
+			// 得到function 位置
+			let index = readFnInfo.fns.indexOf(fn);
+			// 移除read 临时数据记录
+			readFnInfo.fns.splice(index, 1);
+			readFnInfo.mapFns.splice(index, 1);
 		}
 		
-		proxyStorages.forEach(function (proxy) {
-			proxy.read(key, function (...args) {
-				fn.bind(this)(...args);
-				proxyStorages.forEach(proxy => proxy.removeRead(key, arguments.callee))
-			});
+		// 检查是否重复 read 监听
+		if (readFnInfo.fns.indexOf(fn) !== -1) return this;
+		
+		// 存放入标示内
+		readFnInfo.fns.push(fn)
+		readFnInfo.mapFns.push(proxyWatchFn)
+		
+		// 进行代理读取监听
+		proxyStorage.forEach(function (proxy) {
+			proxy.read(key, proxyWatchFn);
 		})
 		return this;
 	},
@@ -1017,9 +1025,9 @@ Driven.prototype = {
 	 * @param fn
 	 */
 	unRead: function (key, fn) {
-		let proxyStorages = proxyStorage[this.__sourceId__];
+		let proxyStorage = proxyStorage[this.__sourceId__];
 		[].concat(key).forEach(key => {
-			proxyStorages.forEach(proxy => proxy.removeRead(key, fn));
+			proxyStorage.forEach(proxy => proxy.removeRead(key, fn));
 		});
 		return this;
 	},
@@ -1029,25 +1037,25 @@ Driven.prototype = {
 	 * @param watchFn
 	 */
 	watch: function (watchKey, watchFn) {
-		let proxyStorages = proxyStorage[this.__sourceId__];
+		let proxyStorage = proxyStorage[this.__sourceId__];
 		// 获取拥有对应key的观察实例
-		let watchIndex = proxyStorages.findIndex(function (proxy) {
+		let watchIndex = proxyStorage.findIndex(function (proxy) {
 			return proxy.checkedHasOwnProperty(watchKey)
 		})
 		
 		if (watchIndex === -1) {
-			proxyStorages.forEach(function (proxy) {
+			proxyStorage.forEach(function (proxy) {
 				
 				proxy.addListen(watchKey, function (...args) {
 					watchFn.bind(this)(...args);
-					proxyStorages.forEach(proxy => proxy.removeListen(watchKey, arguments.callee));
+					proxyStorage.forEach(proxy => proxy.removeListen(watchKey, arguments.callee));
 					
 				});
 				
 				
 			})
 		} else {
-			proxyStorages[watchIndex].addListen(watchKey, watchFn)
+			proxyStorage[watchIndex].addListen(watchKey, watchFn)
 		}
 		return this;
 	},
@@ -1094,8 +1102,64 @@ Driven.prototype = {
 	 * @returns Driven
 	 */
 	forbidWrite: function (...keys) {
-		proxyStorage[this.__sourceId__].forEach(proxy => proxy.addForbidWriteKey(...keys))
+		let forbidWriteKeys = proxyForbidWriteKeys[this.__sourceId__];
+		[...keys].forEach(key => {
+			if (typeof key === "string") {
+				key = getNormKey(key);
+				forbidWriteKeys.indexOf(key) === -1 && forbidWriteKeys.push(key)
+			}
+		});
 		return this;
+	},
+	/**
+	 * 监听实例合并
+	 * @param obj
+	 * @returns {Driven}
+	 */
+	merge: function (...obj) {
+		// 合并参数并安全转换成监听实例
+		return new Driven(undefined, [this].concat(...obj));
+	},
+	/**
+	 * 检查是否拥有制定的key,有则返回观察实例，没有则返回undefined
+	 * @param key
+	 * @param getFrist 如果为true 则直接返回第一个非复合实例
+	 * @returns {*}
+	 */
+	checkedHasOwnProperty: function (key, getFrist) {
+		let id = this.__sourceId__;
+		let proxy = proxyStorage[id];
+		let proxyMergeInstance = proxyMergeStorage[id];
+		
+		// 检查是否复合观察实例
+		if (proxy) {
+			let instance = proxy.checkedHasOwnProperty(key) && this;
+			return getFrist ? {
+				instance: this,
+				res: instance
+			} : instance;
+		} else {
+			let i = 0;
+			let len = proxyMergeInstance.length;
+			
+			let fristInstance
+			while (i < len) {
+				let isFrist = getFrist && i === 0;
+				let instance = proxyMergeInstance[i++].checkedHasOwnProperty(key, isFrist || undefined);
+				// 第一个实例检查特殊处理
+				if (isFrist) {
+					fristInstance = instance;
+					instance = instance.res;
+				}
+				if (instance) {
+					return getFrist ? {
+						res: instance,
+						instance: instance,
+					} : instance;
+				}
+			}
+			return fristInstance
+		}
 	},
 	/**
 	 * 观察实例销毁
@@ -1107,19 +1171,5 @@ Driven.prototype = {
 		Object.keys(this).forEach(function (key) {
 			delete this[key];
 		}.bind(this))
-	},
-	/**
-	 * 监听实例合并
-	 * @param obj
-	 * @returns {Driven}
-	 */
-	merge: function (...obj) {
-		// 合并参数并安全转换成监听实例
-		let proxys = [...obj].reduce(function (proxys, instance) {
-			return proxys.concat(isInstance(instance, Driven) ? proxyStorage[instance.__sourceId__] : new observerProxy(isMemberData(instance) ? instance : {}));
-		}, []);
-		
-		proxyStorage[this.__sourceId__].push(...proxys);
-		return this;
 	}
 };

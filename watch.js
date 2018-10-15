@@ -443,7 +443,7 @@ function listenNode(parentListen, nowKey) {
 			// 更新节点数据的描述
 			this.describeUpdate();
 			//标识有数据
-			this.isData = this.targetData !== undefined;
+			this.isData = (this.parentData || {}).hasOwnProperty(nowKey);
 		}
 	} else {
 		this.targetData = parentListen;
@@ -782,6 +782,7 @@ observerProxy.prototype = {
 					listen.read(fn);
 				}
 			}
+			
 			// 存储节点观察信息数据
 			listen.originMapInfo || addOriginInfo(listen);
 			return nextKey;
@@ -949,9 +950,9 @@ Driven.prototype = {
 		
 		// 检查设置的key是否存在禁止写入的名单中
 		if (proxyForbidWriteKeys[id].some(function ($key) {
-			forbidWriteKey = $key;
-			return getNormKey(key).match(new RegExp('^' + $key + '([.]|$)')) || $key.match(new RegExp('^' + key + '([.]|$)'));
-		})) return console.warn('此值不可修改 ^o^ 【 key : ' + forbidWriteKey + ' 已设置为不可写 】');
+				forbidWriteKey = $key;
+				return getNormKey(key).match(new RegExp('^' + $key + '([.]|$)')) || $key.match(new RegExp('^' + key + '([.]|$)'));
+			})) return console.warn('此值不可修改 ^o^ 【 key : ' + forbidWriteKey + ' 已设置为不可写 】');
 		
 		
 		// 检查是否复合观察实例
@@ -986,37 +987,57 @@ Driven.prototype = {
 	 * @param fn
 	 */
 	read: function (key, fn) {
-		let proxyStorage = proxyStorage[this.__sourceId__];
-		let readInfo = proxyTempStorage[this.__sourceId__].read;
+		let id = this.__sourceId__;
+		let proxy = proxyStorage[id];
+		let proxyMergeInstance = proxyMergeStorage[id];
 		
-		let readFnInfo = readInfo[key] = readInfo[key] || {
-			fns: [],
-			mapFns: []
-		};
-		
-		const proxyWatchFn = function (...args) {
-			// 代理执行
-			fn.bind(this)(...args);
-			// 进行遍历移除
-			proxyStorage.forEach(proxy => proxy.removeRead(key, arguments.callee));
-			// 得到function 位置
-			let index = readFnInfo.fns.indexOf(fn);
-			// 移除read 临时数据记录
-			readFnInfo.fns.splice(index, 1);
-			readFnInfo.mapFns.splice(index, 1);
+		// 检查是否复合观察实例
+		if (proxy) {
+			proxy.read(key, fn);
+		} else {
+			// 获取拥有属性的实例
+			let instance = this.checkedHasOwnProperty(key);
+			
+			// 检查是否有原本存在的数据（立马执行）
+			if (instance) {
+				instance.read(key, fn)
+			}else{
+				// 获取读取监听容器
+				let readInfo = proxyTempStorage[this.__sourceId__].read;
+				// 数据格式化
+				let readFnInfo = readInfo[key] = readInfo[key] || {
+					fns: [],
+					mapFns: []
+				};
+				
+				// 代理监听
+				const proxyWatchFn = function (...args) {
+					// 代理执行
+					fn.bind(this)(...args);
+					// 进行遍历移除
+					proxyMergeInstance.forEach(proxy => proxy.removeRead(key, arguments.callee));
+					// 得到function 位置
+					let index = readFnInfo.fns.indexOf(fn);
+					// 移除read 临时数据记录
+					if(index !== -1){
+						readFnInfo.fns.splice(index, 1);
+						readFnInfo.mapFns.splice(index, 1);
+					}
+				}
+				
+				// 检查是否重复 read 监听
+				if (readFnInfo.fns.indexOf(fn) !== -1) return this;
+				
+				// 存放入标示内
+				readFnInfo.fns.push(fn)
+				readFnInfo.mapFns.push(proxyWatchFn)
+				
+				// 进行代理读取监听
+				proxyMergeInstance.forEach(function (proxy) {
+					proxy.read(key, proxyWatchFn);
+				})
+			}
 		}
-		
-		// 检查是否重复 read 监听
-		if (readFnInfo.fns.indexOf(fn) !== -1) return this;
-		
-		// 存放入标示内
-		readFnInfo.fns.push(fn)
-		readFnInfo.mapFns.push(proxyWatchFn)
-		
-		// 进行代理读取监听
-		proxyStorage.forEach(function (proxy) {
-			proxy.read(key, proxyWatchFn);
-		})
 		return this;
 	},
 	/**
@@ -1025,10 +1046,20 @@ Driven.prototype = {
 	 * @param fn
 	 */
 	unRead: function (key, fn) {
-		let proxyStorage = proxyStorage[this.__sourceId__];
-		[].concat(key).forEach(key => {
-			proxyStorage.forEach(proxy => proxy.removeRead(key, fn));
-		});
+		let id = this.__sourceId__;
+		let proxy = proxyStorage[id];
+		let proxyMergeInstance = proxyMergeStorage[id];
+		
+		// 检查是否复合观察实例
+		if (proxy) {
+			proxy.removeRead(key, fn);
+		} else {
+			
+			
+			proxyMergeInstance.forEach(proxy => {
+				// proxy.unRead(key, fn);
+			});
+		}
 		return this;
 	},
 	/**
@@ -1172,4 +1203,5 @@ Driven.prototype = {
 			delete this[key];
 		}.bind(this))
 	}
+	
 };

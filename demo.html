@@ -5,7 +5,7 @@
     <title>Title</title>
 </head>
 <body>
-<script src="observer.js"></script>
+<!--<script src="observer.js"></script>-->
 <script src="watch.js"></script>
 <script>
 	// 定义一个源数据
@@ -17,15 +17,36 @@
 
 	    // 创建第一个监听实例
 	    var w1=new Driven(test1)
+	    var w2=new Driven(test2)
 
 	    // 对第一个监听实例数据进行监听
 	    w1.watch('a.c',function(newData,oldData){
 		    console.log(newData,oldData)
 	    });
 
-	    var merge=w1.merge(test2);
+	    // 对第一个监听实例数据进行监听
+	    w1.watch('b.c',function(newData,oldData){
+		    console.log(newData,oldData)
+	    });
+
+	    w2.watch('a.c',function(newData,oldData){
+		    console.log(newData,oldData,'w2')
+	    });
+
+	    w2.watch('b.c',function(newData,oldData){
+		    console.log(newData,oldData,'w2')
+	    });
+
+	    // 测试提前销毁
+	    w2.destroy();
+
+	    console.log(w2)
+
+	    var merge=w1.merge(w2);
 
 
+	    window.ss=merge;
+	    console.log(merge)
 
     }
 </script>

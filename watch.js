@@ -1,5 +1,13 @@
 /**
  * 数据响应观察
+ * 设计结构说明：
+ * 1、此对象观察分为三部分
+ *     （1） 对外暴露的类 Driven 提供对外的接口调用
+ *     （2） 观察代理 observerProxy 类 主要作为代理来封装对应的方法来操作相关监听节点
+ *     （2） 数据监听节点 listenNode 类 用于数据节点相关监听、新旧数据处理
+ *
+ *  2、对应的源数据利用 originDataStorage （一个二维数组，第二维空间长度为15000）来存储，并其对应的数组索引位置 通过从 originDataMapStorage 中可以获取对应数据节点的位置、源数据、和拥有的监听节点信息
+ *
  * Created by xiyuan on 18-6-15.
  */
 
@@ -29,7 +37,7 @@ const originDataStorage = [];
 // 源数据对应的观察索引信息
 const originDataIndexStorage = [];
 
-// 源数据对应的观察索引信息
+// 源数据对应的观察索引信息 （包含源数据、监听的节点、位置信息）
 const originDataMapStorage = [];
 
 // 可使用的源数据位置
@@ -195,6 +203,7 @@ function addOriginInfo(listenNode) {
 			}
 		};
 		
+		// 当前数据映射容器第一维目前可存放的位置
 		location = originDataMapStorage.length - 1;
 		
 		var containerStorage = originDataMapStorage[location];
@@ -221,7 +230,7 @@ function removeOriginInfo(data) {
 		if (index !== -1) originMapInfo.list.splice(index, 1);
 		// 移除关联
 		delete data.originMapInfo;
-		// 检查源数据中是否还存在数据监听节点
+		// 检查源数据中是否还存在数据监听节点 如果不存在继续执行后续相关数据销毁
 		if (originMapInfo.list.length) return;
 	} else {
 		originMapInfo = getOriginMapInfo(data)
@@ -231,14 +240,16 @@ function removeOriginInfo(data) {
 		delete listenNode.originMapInfo;
 	})
 	
-	// 记录可使用的位置
+	// 记录可使用的位置，以便下次位置可以重复使用，避免存储容器过大
 	usableLocation.push(originMapInfo.index);
-	// 下面注释的delete 不能打开（便于可用数据位置记录）
+	
 	// 移除 originDataIndexStorage、originDataStorage中的源数据标识
 	delete originDataStorage[originMapInfo.index.one][originMapInfo.index.two];
-	// delete originDataMapStorage[originMapInfo.index.one][originMapInfo.index.two];
 	delete originDataIndexStorage[originMapInfo.index.one][originMapInfo.index.two];
+	// 源数据映射信息存储 存放的对象是 originMapInfo
+	delete originDataMapStorage[originMapInfo.index.one][originMapInfo.index.key];
 	
+	// 下面注释的delete 不能打开（便于可用数据位置记录）
 	// delete originMapInfo.index.one;
 	// delete originMapInfo.index.two;
 	// delete originMapInfo.index.key;

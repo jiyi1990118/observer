@@ -463,6 +463,27 @@ function getAllProxy(instance, storage) {
 	return storage;
 }
 
+// 移除监听的公共代码块
+function unWatchMixin(watchFnInfo, watchFn, key) {
+	// 检查是否固定监听
+	let index = watchFnInfo.fixedFn.indexOf(watchFn);
+	
+	if (index !== -1) {
+		watchFnInfo.fixedFn.splice(index, 1);
+		let proxy = watchFnInfo.fixedProxy.splice(index, 1)[0];
+		proxy.removeListen(key, watchFn);
+	} else {
+		index = watchFnInfo.fns.indexOf(watchFn)
+		// 检查并移除相关代理的监听
+		if (index !== -1) {
+			let mapFns = watchFnInfo.mapFns.splice(index, 1)[0];
+			mapFns.forEach(info => {
+				info.proxy.removeListen(key, info.fn);
+			})
+		}
+	}
+}
+
 /**
  * 数据监听节点
  * @param parentListen
@@ -1166,25 +1187,31 @@ Driven.prototype = {
 		if (proxy) {
 			proxy.removeRead(key, fn);
 		} else {
-			key = getNormKey(key);
 			// 获取读取监听容器
 			let readInfo = proxyTempStorage[id].read;
-			// 数据格式化
-			let readFnInfo = readInfo[key] || {fns: []};
-			// 得到function 位置
-			let index = readFnInfo.fns.indexOf(fn);
-			
-			// 检查是否有read监听
-			if (index !== -1) {
-				// 获取当前实例中所有监听代理
-				let listenProxys = getAllProxy(this);
+			if (key) {
+				key = getNormKey(key);
+				// 数据格式化
+				let readFnInfo = readInfo[key] || {fns: []};
+				// 得到function 位置
+				let index = readFnInfo.fns.indexOf(fn);
 				
-				listenProxys.forEach(proxy => {
-					proxy.removeRead(key, readFnInfo.mapFns[index]);
-				});
-				
-				readFnInfo.fns.splice(index, 1);
-				readFnInfo.mapFns.splice(index, 1);
+				// 检查是否有read监听
+				if (index !== -1) {
+					// 获取当前实例中所有监听代理
+					let listenProxys = getAllProxy(this);
+					
+					listenProxys.forEach(proxy => {
+						proxy.removeRead(key, readFnInfo.mapFns[index]);
+					});
+					
+					readFnInfo.fns.splice(index, 1);
+					readFnInfo.mapFns.splice(index, 1);
+				}
+			} else {
+				Object.keys(readInfo).forEach(key => {
+					let readFnInfo = readInfo[key];
+				})
 			}
 		}
 		return this;
@@ -1313,34 +1340,31 @@ Driven.prototype = {
 		if (proxy) {
 			proxy.removeListen(watchKey, watchFn);
 		} else {
-			let key = getNormKey(watchKey);
 			// 获取读取监听容器
 			let watchInfo = proxyTempStorage[id].watch;
-			// 数据格式化
-			let watchFnInfo = watchInfo[key] = watchInfo[key] || {
-				fns: [],
-				mapFns: [],
-				fixedFn: [],
-				fixedProxy: [],
-			};
-			
-			// 检查是否固定监听
-			let index = watchFnInfo.fixedFn.indexOf(watchFn);
-			
-			if (index !== -1) {
-				watchFnInfo.fixedFn.splice(index, 1);
-				proxy = watchFnInfo.fixedProxy.splice(index, 1)[0];
-				proxy.removeListen(key, watchFn);
+			// 判断是否全部移除
+			if (watchKey) {
+				let key = getNormKey(watchKey);
+				// 数据格式化
+				let watchFnInfo = watchInfo[key] = watchInfo[key] || {
+					fns: [],
+					mapFns: [],
+					fixedFn: [],
+					fixedProxy: [],
+				};
+				unWatchMixin(watchFnInfo, watchFn, key);
 			} else {
-				index = watchFnInfo.fns.indexOf(watchFn)
-				// 检查并移除相关代理的监听
-				if (index !== -1) {
-					let mapFns = watchFnInfo.mapFns.splice(index, 1)[0];
-					mapFns.forEach(info => {
-						info.proxy.removeListen(key, info.fn);
+				Object.keys(watchInfo).forEach(key => {
+					let watchFnInfo = watchInfo[key];
+					watchFnInfo.fns.forEach(watchFn => {
+						unWatchMixin(watchFnInfo, watchFn, key);
 					})
-				}
+					watchFnInfo.fixedFn.forEach(watchFn => {
+						unWatchMixin(watchFnInfo, watchFn, key);
+					})
+				})
 			}
+			
 		}
 		return this;
 	},

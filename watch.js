@@ -456,11 +456,25 @@ function getAllProxy(instance, storage) {
 			storage.push(proxy)
 		}
 	} else {
-		proxyMergeInstance.forEach((arr, instance) => {
+		proxyMergeInstance.forEach(instance => {
 			getAllProxy(instance, storage)
 		})
 	}
 	return storage;
+}
+
+// 移除数据读取监听的公共代码块
+function unReadMixin(readFnInfo, fn, key, listenProxys) {
+	// 得到function 位置
+	let index = readFnInfo.fns.indexOf(fn);
+	// 检查是否有read监听
+	if (index !== -1) {
+		listenProxys.forEach(proxy => {
+			proxy.removeRead(key, readFnInfo.mapFns[index]);
+		});
+		readFnInfo.fns.splice(index, 1);
+		readFnInfo.mapFns.splice(index, 1);
+	}
 }
 
 // 移除监听的公共代码块
@@ -479,6 +493,27 @@ function unWatchMixin(watchFnInfo, watchFn, key) {
 			let mapFns = watchFnInfo.mapFns.splice(index, 1)[0];
 			mapFns.forEach(info => {
 				info.proxy.removeListen(key, info.fn);
+			})
+		}
+	}
+}
+
+// 移除数据读取并监听数据的公共代码块
+function unReadWatchMixin(watchFnInfo, watchFn, key) {
+	// 检查是否固定监听
+	let index = watchFnInfo.fixedFn.indexOf(watchFn);
+	
+	if (index !== -1) {
+		watchFnInfo.fixedFn.splice(index, 1);
+		let proxy = watchFnInfo.fixedProxy.splice(index, 1)[0];
+		proxy.removeReadWatch(key, watchFn);
+	} else {
+		index = watchFnInfo.fns.indexOf(watchFn)
+		// 检查并移除相关代理的监听
+		if (index !== -1) {
+			let mapFns = watchFnInfo.mapFns.splice(index, 1)[0];
+			mapFns.forEach(info => {
+				info.proxy.removeReadWatch(key, info.fn);
 			})
 		}
 	}
@@ -1189,28 +1224,19 @@ Driven.prototype = {
 		} else {
 			// 获取读取监听容器
 			let readInfo = proxyTempStorage[id].read;
+			// 获取当前实例中所有监听代理
+			let listenProxys = getAllProxy(this);
 			if (key) {
 				key = getNormKey(key);
 				// 数据格式化
 				let readFnInfo = readInfo[key] || {fns: []};
-				// 得到function 位置
-				let index = readFnInfo.fns.indexOf(fn);
-				
-				// 检查是否有read监听
-				if (index !== -1) {
-					// 获取当前实例中所有监听代理
-					let listenProxys = getAllProxy(this);
-					
-					listenProxys.forEach(proxy => {
-						proxy.removeRead(key, readFnInfo.mapFns[index]);
-					});
-					
-					readFnInfo.fns.splice(index, 1);
-					readFnInfo.mapFns.splice(index, 1);
-				}
+				unReadMixin(readFnInfo, fn, key, listenProxys)
 			} else {
 				Object.keys(readInfo).forEach(key => {
 					let readFnInfo = readInfo[key];
+					readFnInfo.fns.forEach(fn => {
+						unReadMixin(readFnInfo, fn, key, listenProxys)
+					})
 				})
 			}
 		}
@@ -1364,7 +1390,6 @@ Driven.prototype = {
 					})
 				})
 			}
-			
 		}
 		return this;
 	},
@@ -1491,33 +1516,29 @@ Driven.prototype = {
 		if (proxy) {
 			proxy.removeReadWatch(watchKey, watchFn);
 		} else {
-			let key = getNormKey(watchKey);
 			// 获取读取监听容器
 			let watchInfo = proxyTempStorage[id].watch;
-			// 数据格式化
-			let watchFnInfo = watchInfo[key] = watchInfo[key] || {
-				fns: [],
-				mapFns: [],
-				fixedFn: [],
-				fixedProxy: [],
-			};
-			
-			// 检查是否固定监听
-			let index = watchFnInfo.fixedFn.indexOf(watchFn);
-			
-			if (index !== -1) {
-				watchFnInfo.fixedFn.splice(index, 1);
-				proxy = watchFnInfo.fixedProxy.splice(index, 1)[0];
-				proxy.removeReadWatch(key, watchFn);
+			// 检查是否
+			if (watchKey) {
+				let key = getNormKey(watchKey);
+				// 数据格式化
+				let watchFnInfo = watchInfo[key] = watchInfo[key] || {
+					fns: [],
+					mapFns: [],
+					fixedFn: [],
+					fixedProxy: [],
+				};
+				unReadWatchMixin(watchFnInfo, watchFn, key);
 			} else {
-				index = watchFnInfo.fns.indexOf(watchFn)
-				// 检查并移除相关代理的监听
-				if (index !== -1) {
-					let mapFns = watchFnInfo.mapFns.splice(index, 1)[0];
-					mapFns.forEach(info => {
-						info.proxy.removeReadWatch(key, info.fn);
+				Object.keys(watchInfo).forEach(key => {
+					let watchFnInfo = watchInfo[key];
+					watchFnInfo.fns.forEach(watchFn => {
+						unReadWatchMixin(watchFnInfo, watchFn, key);
 					})
-				}
+					watchFnInfo.fixedFn.forEach(watchFn => {
+						unReadWatchMixin(watchFnInfo, watchFn, key);
+					})
+				})
 			}
 		}
 		return this;
@@ -1613,7 +1634,12 @@ Driven.prototype = {
 		if (proxy) {
 			proxy.destroy()
 		} else {
+			// 销毁在复合实例中创建的监听实例
 			proxyMergeCreateStorage[id].forEach(instance => instance.destroy())
+			// 销毁复合实例的各种监听
+			this.unRead();
+			this.unWatch();
+			this.unReadWatch();
 		}
 		
 		delete proxyStorage[id];
@@ -1627,5 +1653,4 @@ Driven.prototype = {
 			delete this[key];
 		}.bind(this))
 	}
-	
 };

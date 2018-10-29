@@ -16,8 +16,8 @@
     window.onload = function () {
 
 	    // 创建第一个监听实例
-	    var w1=window.w1=new Driven(test1)
-	    var w2=window.w2=new Driven(test2)
+	    var w1=window.w1=new observerDriven(test1)
+	    var w2=window.w2=new observerDriven(test2)
 
 	    // 对第一个监听实例数据进行监听
 	    w1.watch('a.c',function(newData,oldData){

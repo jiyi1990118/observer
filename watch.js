@@ -2,7 +2,7 @@
  * 数据响应观察
  * 设计结构说明：
  * 1、此对象观察分为三部分
- *     （1） 对外暴露的类 Driven 提供对外的接口调用
+ *     （1） 对外暴露的类 observerDriven 提供对外的接口调用
  *     （2） 观察代理 observerProxy 类 主要作为代理来封装对应的方法来操作相关监听节点
  *     （2） 数据监听节点 listenNode 类 用于数据节点相关监听、新旧数据处理
  *
@@ -1063,14 +1063,14 @@ observerProxy.prototype = {
  * @param {String | Array | Null } forbidWriteKeys  禁止写入的key
  * @constructor
  */
-function Driven(obj, ...forbidWriteKeys) {
+function observerDriven(obj, ...forbidWriteKeys) {
 	let id = uid();
 	this.__sourceId__ = id;
 	proxyForbidWriteKeys[id] = [];
 	// 检查是否空置观察实例
 	if (obj) {
 		// 检查是否观察驱动实例
-		if (isInstance(obj, Driven)) return obj.forbidWrite(...forbidWriteKeys);
+		if (isInstance(obj, observerDriven)) return obj.forbidWrite(...forbidWriteKeys);
 		proxyStorage[id] = new observerProxy(this, isMemberData(obj) ? obj : {}, forbidWriteKeys);
 	} else {
 		proxyTempStorage[id] = {
@@ -1083,7 +1083,7 @@ function Driven(obj, ...forbidWriteKeys) {
 		
 		// 保存合并实例
 		proxyMergeStorage[id] = [...forbidWriteKeys].reduce((arr, instance, index) => {
-			if (isInstance(instance, Driven)) {
+			if (isInstance(instance, observerDriven)) {
 				let id = instance.__sourceId__
 				// 检查实例是否销毁
 				if (id) {
@@ -1098,7 +1098,7 @@ function Driven(obj, ...forbidWriteKeys) {
 					log.warn('观察实例 merge 操作的第' + index + '个参数为观察实例，之前已销毁，请注意...')
 				}
 			} else {
-				let newInstance = new Driven(instance);
+				let newInstance = new observerDriven(instance);
 				arr.push(newInstance);
 				// 保存合并时候新创建的实例（以便销毁时候追踪）
 				proxyMergeCreateStorage[id].push(newInstance);
@@ -1108,7 +1108,7 @@ function Driven(obj, ...forbidWriteKeys) {
 	}
 }
 
-Driven.prototype = {
+observerDriven.prototype = {
 	// 标识是观察实例
 	isObserver: true,
 	/**
@@ -1265,7 +1265,7 @@ Driven.prototype = {
 	 * @param watchKey
 	 * @param watchFn
 	 * @param mode 模式   默认 false 顺延   true 固定的proxy监听
-	 * @returns {Driven}
+	 * @returns {observerDriven}
 	 */
 	watch: function (watchKey, watchFn, mode) {
 		let key = getNormKey(watchKey);
@@ -1574,7 +1574,7 @@ Driven.prototype = {
 	/**
 	 * 禁止写入
 	 * @param {String | Array} keys
-	 * @returns Driven
+	 * @returns observerDriven
 	 */
 	forbidWrite: function (...keys) {
 		if (!this.__sourceId__) return this;
@@ -1590,11 +1590,11 @@ Driven.prototype = {
 	/**
 	 * 监听实例合并
 	 * @param obj
-	 * @returns {Driven}
+	 * @returns {observerDriven}
 	 */
 	merge: function (...obj) {
 		// 合并参数并安全转换成监听实例
-		return new Driven(undefined, ...([this].concat(...obj)));
+		return new observerDriven(undefined, ...([this].concat(...obj)));
 	},
 	/**
 	 * 检查是否拥有制定的key,有则返回观察实例，没有则返回undefined

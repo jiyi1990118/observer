@@ -1,11 +1,11 @@
-# observer.js / watch.js
+# observer.js / observerDriven.js
 javascript for es5 Data observation （基于es5核心javascript的数据观察）OR Manual trigger
 
 > 两个工具的API接口都差不多
 
 ### 代码文件说明
 - observer.js   数据监听是利用ES5中的 Object.defineProperty 来实现对象属性监听
-- watch.js      数据监听是需要进行手动触发并监听
+- observerDriven.js      数据监听是需要进行手动触发并监听
 
 
 ### api
@@ -18,7 +18,9 @@ javascript for es5 Data observation （基于es5核心javascript的数据观察�
 - set       设置值
 - get       获取值
 - destroy   销毁实例
-- forbidWrite 新添加的接口 (watch.js)  返回一个禁止写入指定的Key监听实例
+- merge     多个监听实例组合后返回一个新的组合实例 (observerDriven.js新添加的接口)
+- forbidWrite   向监听实例中添加禁止写入指定的Key (observerDriven.js新添加的接口)
+- checkedHasOwnProperty   检查是否拥有制定的key,有则返回观察实例，没有则返回undefined (observerDriven.js新添加的接口)
 
 ### observer 基本使用案例
 
@@ -85,14 +87,14 @@ javascript for es5 Data observation （基于es5核心javascript的数据观察�
     },2000)
 ```
 
-### watch.js 基本使用案例
+### observerDriven.js 基本使用案例
 
 ``` javascript
     // 定义一个源数据
     var testObj={c:"test"};
     
     // 创建第一个监听实例
-    var w1=new Driven(testObj)
+    var w1=new observerDriven(testObj)
     
     // 对第一个监听实例数据进行监听
     w1.watch('a.c',function(newData,oldData){
@@ -103,7 +105,7 @@ javascript for es5 Data observation （基于es5核心javascript的数据观察�
     w1.set('a',{c:'yes'})
     
     // 创建第二个监听实例
-    var w2=new Driven(testObj);
+    var w2=new observerDriven(testObj);
     
     // 对第二个监听实例数据进行监听
     w2.watch('a.b',function(newData,oldData){

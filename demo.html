@@ -6,49 +6,65 @@
 </head>
 <body>
 <!--<script src="observer.js"></script>-->
-<script src="watch.js"></script>
+<script src="observerDriven.js"></script>
 <script>
 	// 定义一个源数据
-	var test1={a:"tesa"};
+	var test1 = {a: "tesa"};
 
-	var test2={b:'tesb'}
+	var test11 = {test1: test1};
 
-    window.onload = function () {
+	var test2 = {b: 'tesb'}
 
-	    // 创建第一个监听实例
-	    var w1=window.w1=new observerDriven(test1)
-	    var w2=window.w2=new observerDriven(test2)
+	window.onload = function () {
 
-	    // 对第一个监听实例数据进行监听
-	    w1.watch('a.c',function(newData,oldData){
-		    console.log(newData,oldData)
-	    });
+		// 创建第一个监听实例
+		var w1 = window.w1 = new observerDriven(test1)
+		var w11 = window.w11 = new observerDriven(test11)
+		var w2 = window.w2 = new observerDriven(test2)
 
-	    // 对第一个监听实例数据进行监听
-	    w1.watch('b.c',function(newData,oldData){
-		    console.log(newData,oldData)
-	    });
+		// 对第一个监听实例数据进行监听
+		w1.watch('a.c', function (newData, oldData) {
+			console.log(newData, oldData)
+		});
 
-	    w2.watch('a.c',function(newData,oldData){
-		    console.log(newData,oldData,'w2')
-	    });
+		w11.watch('test1.a.c', function (newData, oldData) {
+			console.log(newData, oldData)
+		});
 
-	    w2.watch('b.c',function(newData,oldData){
-		    console.log(newData,oldData,'w2')
-	    });
+		// 对第一个监听实例数据进行监听
+		w1.watch('b.c', function (newData, oldData) {
+			console.log(newData, oldData)
+		});
 
-	    // 测试提前销毁
-	    w2.destroy();
+		w2.watch('a.c', function (newData, oldData) {
+			console.log(newData, oldData, 'w2')
+		});
 
-	    console.log(w2)
+		w2.watch('b.c', function (newData, oldData) {
+			console.log(newData, oldData, 'w2')
+		});
 
-	    // var merge=w1.merge(w2);
+		// 给源数据进行赋值
+		test1.a = {c: '对源数据进行赋值'};
+
+		// 利用手动的方式对源数据进行数据检查
+		w1.checked()
+
+		// 尝试利用观察实例对源数据进行修改 （推荐通过此方法进行修改）
+		w1.set('a.c', '通过观察实例set方法修改')
+
+		// 测试提前销毁
+		w2.destroy();
+
+		// console.log(w2)
+
+		// var merge=w1.merge(w2);
 
 
-	    // window.ss=merge;
-	    // console.log(merge)
+		// window.ss=merge;
+		// console.log(merge)
 
-    }
+	}
 </script>
 </body>
 </html>

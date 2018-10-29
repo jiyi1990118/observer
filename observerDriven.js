@@ -158,7 +158,7 @@ function addOriginInfo(listenNode) {
 		originDataStorage[locationInfo.one][locationInfo.two] = listenNode.targetData;
 		originDataIndexStorage[locationInfo.one][locationInfo.two] = locationInfo.key;
 		// 存入源数据对应的观察索引信息
-		originDataMapStorage[locationInfo.one][locationInfo.key] = {
+		listenNode.originMapInfo = originDataMapStorage[locationInfo.one][locationInfo.key] = {
 			targetData: listenNode.targetData,
 			list: [listenNode],
 			index: locationInfo
@@ -212,7 +212,7 @@ function addOriginInfo(listenNode) {
 		if (!Object.keys(containerStorage || {}).length % 15000) {
 			originDataMapStorage.push(containerStorage = {});
 		}
-		containerStorage[originCount] = originInfo;
+		listenNode.originMapInfo = containerStorage[originCount] = originInfo;
 	}
 }
 
@@ -616,6 +616,7 @@ listenNode.prototype = {
 		var targetData = arguments.length ? data : this.targetData;
 		// 检查数据是否有更变
 		var equal = describeDiff(describe, data);
+		
 		// 检查数据是否同一对象
 		if (!equal || targetData !== oldData || isCheck) {
 			this.targetData = targetData;
@@ -806,20 +807,25 @@ observerProxy.prototype = {
 	 * @param data
 	 */
 	set: function (key, data) {
+		var listen=this.listen;
 		// 检查是否销毁
-		if (!this.listen) return;
+		if (!listen) return;
 		// 获取最后一个对象
-		var lastObjInfo = completeLoopLastObj(this.listen.targetData, key, data);
+		var lastObjInfo = completeLoopLastObj(listen.targetData, key, data);
 		
 		// 获取源数据映射的信息
 		var originInfo = getOriginMapInfo(lastObjInfo.useObj);
 		
 		// 检查受影响的节点
-		if (originInfo && originInfo.list.length) {
-			// 获取其中一个节点进行比对处理
-			originInfo.list.forEach(function (listenNode) {
+		if (originInfo) {
+			// 获取其中节点进行比对处理
+			// listen.inspectionChild(lastObjInfo.useKey, lastObjInfo.useObj);
+			originInfo.list.length && originInfo.list.forEach(function (listenNode) {
 				listenNode.inspectionChild(lastObjInfo.useKey, lastObjInfo.useObj);
 			})
+		} else {
+			// 此情况一般是之前直接性对源数据进行修改，导致获取最后一个对象后找不到数据映射信息（因为最后一个对象可能是直接在源数据上赋值的，用此方法<检查整体数据>与观察实例中checked方法一致）
+			listen.inspectionChild('', listen.targetData);
 		}
 		return true;
 	},
@@ -1655,11 +1661,11 @@ observerDriven.prototype = {
 			// 销毁被关联实例之间的关系
 			proxyMergeStorage[id].forEach(instance => {
 				let proxy = proxyStorage[instance.__sourceId__];
-				let multipleInstance=proxy.multipleInstance;
-				let index=multipleInstance.indexOf(this);
+				let multipleInstance = proxy.multipleInstance;
+				let index = multipleInstance.indexOf(this);
 				
-				if(index !== -1){
-					multipleInstance.splice(index,1);
+				if (index !== -1) {
+					multipleInstance.splice(index, 1);
 				}
 			})
 			// 销毁在组合实例中创建的监听实例

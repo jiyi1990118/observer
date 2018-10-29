@@ -785,27 +785,17 @@ listenNode.prototype = {
 
 /**
  * 观察代理
+ * @param instance
  * @param obj  源数据对象
- * @param forbidWriteKeys  禁止写入的key
  */
-function observerProxy(obj, forbidWriteKeys) {
+function observerProxy(instance, obj) {
 	addOriginInfo(this.listen = new listenNode(obj));
+	// 资源实例
+	this.instance = instance;
 	// 标识是观察根路径
 	this.listen.isRoot = true;
-	// 存储禁止写入的key
-	switch (getType(forbidWriteKeys)) {
-		case 'Array':
-			break;
-		case 'String':
-			forbidWriteKeys = forbidWriteKeys.split(',')
-			break;
-		default:
-			forbidWriteKeys = [];
-	}
-	// 存入禁止写入的名单中
-	this.forbidWriteKeys = forbidWriteKeys.map(function (key) {
-		return getNormKey(key);
-	});
+	// 组合对象关联实例容器
+	this.multipleInstance = [];
 }
 
 // 观察代理原型
@@ -1033,6 +1023,14 @@ observerProxy.prototype = {
 		})
 	},
 	/**
+	 * 组合对象关联 (提供销毁时候移除与组合对象之间的关联)
+	 * @param parentInstance
+	 */
+	multipleConnected(parentInstance) {
+		if (this.multipleInstance.indexOf(parentInstance)) return
+		this.multipleInstance.push(parentInstance);
+	},
+	/**
 	 * 销毁观察对象
 	 */
 	destroy: function () {
@@ -1040,6 +1038,19 @@ observerProxy.prototype = {
 		if (!this.listen) return;
 		delete this.listen.isRoot
 		this.listen.destroy();
+		let selfInstace = this.instance;
+		
+		// 移除组合实例中关联的此实例
+		this.multipleInstance.forEach(parentInstance => {
+			let connectedStorage = proxyMergeStorage[parentInstance.__sourceId__];
+			let index = connectedStorage.indexOf(selfInstace);
+			
+			if (index !== -1) {
+				connectedStorage.splice(index, 1);
+			}
+		})
+		
+		
 		Object.keys(this).forEach(function (key) {
 			delete this[key];
 		}.bind(this))
@@ -1060,7 +1071,7 @@ function Driven(obj, ...forbidWriteKeys) {
 	if (obj) {
 		// 检查是否观察驱动实例
 		if (isInstance(obj, Driven)) return obj.forbidWrite(...forbidWriteKeys);
-		proxyStorage[id] = new observerProxy(isMemberData(obj) ? obj : {}, forbidWriteKeys);
+		proxyStorage[id] = new observerProxy(this, isMemberData(obj) ? obj : {}, forbidWriteKeys);
 	} else {
 		proxyTempStorage[id] = {
 			read: {},
@@ -1071,11 +1082,18 @@ function Driven(obj, ...forbidWriteKeys) {
 		proxyMergeCreateStorage[id] = [];
 		
 		// 保存合并实例
-		proxyMergeStorage[id] = [...forbidWriteKeys].reduce(function (arr, instance, index) {
+		proxyMergeStorage[id] = [...forbidWriteKeys].reduce((arr, instance, index) => {
 			if (isInstance(instance, Driven)) {
+				let id = instance.__sourceId__
 				// 检查实例是否销毁
-				if (instance.__sourceId__) {
+				if (id) {
+					let proxy = proxyStorage[instance.__sourceId__]
 					arr.push(instance)
+					// 检查被合并的实例是否单实例
+					if (proxy) {
+						// 存储入代理中，以备销毁时候 解除关联
+						proxy.multipleConnected(this);
+					}
 				} else {
 					log.warn('观察实例 merge 操作的第' + index + '个参数为观察实例，之前已销毁，请注意...')
 				}
@@ -1118,7 +1136,7 @@ Driven.prototype = {
 			})) return console.warn('此值不可修改 ^o^ 【 key : ' + forbidWriteKey + ' 已设置为不可写 】');
 		
 		
-		// 检查是否复合观察实例
+		// 检查是否组合观察实例
 		if (proxy) {
 			return proxy.set(key, data);
 		} else {
@@ -1137,7 +1155,7 @@ Driven.prototype = {
 		let proxy = proxyStorage[id];
 		
 		if (!id) return;
-		// 检查是否复合观察实例
+		// 检查是否组合观察实例
 		if (proxy) {
 			return proxy.get(key);
 		} else {
@@ -1155,7 +1173,7 @@ Driven.prototype = {
 		let proxy = proxyStorage[id];
 		
 		if (!id) return this;
-		// 检查是否复合观察实例
+		// 检查是否组合观察实例
 		if (proxy) {
 			proxy.read(key, fn);
 		} else {
@@ -1218,7 +1236,7 @@ Driven.prototype = {
 		let proxy = proxyStorage[id];
 		
 		if (!id) return this;
-		// 检查是否复合观察实例
+		// 检查是否组合观察实例
 		if (proxy) {
 			proxy.removeRead(key, fn);
 		} else {
@@ -1362,7 +1380,7 @@ Driven.prototype = {
 		let proxy = proxyStorage[id];
 		
 		if (!id) return this;
-		// 检查是否复合观察实例
+		// 检查是否组合观察实例
 		if (proxy) {
 			proxy.removeListen(watchKey, watchFn);
 		} else {
@@ -1403,7 +1421,7 @@ Driven.prototype = {
 		let proxy = proxyStorage[id];
 		let key = getNormKey(watchKey);
 		if (!id) return this;
-		// 检查是否复合观察实例
+		// 检查是否组合观察实例
 		if (proxy) {
 			proxy.readWatch(key, watchFn);
 		} else {
@@ -1512,7 +1530,7 @@ Driven.prototype = {
 		
 		if (!id) return this;
 		
-		// 检查是否复合观察实例
+		// 检查是否组合观察实例
 		if (proxy) {
 			proxy.removeReadWatch(watchKey, watchFn);
 		} else {
@@ -1581,7 +1599,7 @@ Driven.prototype = {
 	/**
 	 * 检查是否拥有制定的key,有则返回观察实例，没有则返回undefined
 	 * @param key
-	 * @param getFrist 如果为true 则直接返回第一个非复合实例
+	 * @param getFrist 如果为true 则直接返回第一个非组合实例
 	 * @returns {*}
 	 */
 	checkedHasOwnProperty: function (key, getFrist) {
@@ -1594,7 +1612,7 @@ Driven.prototype = {
 		let proxy = proxyStorage[id];
 		let proxyMergeInstance = proxyMergeStorage[id];
 		
-		// 检查是否复合观察实例
+		// 检查是否组合观察实例
 		if (proxy) {
 			let instance = proxy.checkedHasOwnProperty(key) && this;
 			return getFrist ? {
@@ -1634,9 +1652,19 @@ Driven.prototype = {
 		if (proxy) {
 			proxy.destroy()
 		} else {
-			// 销毁在复合实例中创建的监听实例
+			// 销毁被关联实例之间的关系
+			proxyMergeStorage[id].forEach(instance => {
+				let proxy = proxyStorage[instance.__sourceId__];
+				let multipleInstance=proxy.multipleInstance;
+				let index=multipleInstance.indexOf(this);
+				
+				if(index !== -1){
+					multipleInstance.splice(index,1);
+				}
+			})
+			// 销毁在组合实例中创建的监听实例
 			proxyMergeCreateStorage[id].forEach(instance => instance.destroy())
-			// 销毁复合实例的各种监听
+			// 销毁组合实例的各种监听
 			this.unRead();
 			this.unWatch();
 			this.unReadWatch();
@@ -1644,6 +1672,7 @@ Driven.prototype = {
 		
 		delete proxyStorage[id];
 		delete proxyMergeStorage[id];
+		// 移除临时存储器（实际上只针对组合实例）
 		delete proxyTempStorage[id];
 		delete proxyForbidWriteKeys[id];
 		delete proxyMergeCreateStorage[id];
